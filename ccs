@@ -316,13 +316,32 @@ case "${1:-}" in
     require_file "$src"
     shift 2
 
+    # Back up current settings.json
+    local backup=""
+    if [[ -f "$CLAUDE_SETTINGS" ]]; then
+      backup="$(mktemp)"
+      cp "$CLAUDE_SETTINGS" "$backup"
+    fi
+
     set -a
     . "$src"
     set +a
 
+    # Sync to settings.json so Claude Code reads the correct base URL / token
+    sync_claude_settings
+
     model="$(effective_model)"
     echo "临时使用: $provider (model: $model)"
-    exec /home/mudern/.local/bin/claude --model "$model" "$@"
+
+    # No exec — we need to restore settings when claude exits
+    /home/mudern/.local/bin/claude --model "$model" "$@" || true
+
+    # Restore original settings
+    if [[ -n "$backup" && -f "$backup" ]]; then
+      cp "$backup" "$CLAUDE_SETTINGS"
+      rm -f "$backup"
+      echo "已恢复全局配置"
+    fi
     ;;
 
   models)

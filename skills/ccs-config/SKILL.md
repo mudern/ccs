@@ -94,17 +94,37 @@ Or test without switching:
 ccs run <name>
 ```
 
-## Provider-specific notes
+## Provider reference
 
-### Known provider base URLs
+Known Anthropic-compatible API providers and their model names (as of 2026-07):
 
-| Provider | Base URL |
-|----------|----------|
-| DeepSeek | `https://api.deepseek.com/anthropic` |
-| GLM (智谱) | `https://open.bigmodel.cn/api/anthropic` |
-| LongCat | `https://api.longcat.chat/anthropic` |
+### DeepSeek
+- **Base URL:** `https://api.deepseek.com/anthropic`
+- **Models:** `deepseek-v4-pro` (best, 1.6T MoE), `deepseek-v4-flash` (fast/cheap, 284B MoE)
+- **Legacy:** `deepseek-chat` → maps to v4-flash (deprecated 2026-07-24)
 
-The env files for existing providers are located at `~/.config/ccs/providers/`. Always read an existing env file for reference when creating a new one.
+### Zhipu GLM (智谱)
+- **Base URL (domestic):** `https://open.bigmodel.cn/api/anthropic`
+- **Base URL (international):** `https://api.z.ai/api/anthropic`
+- **Models:** `glm-5.2` (latest flagship, 200K ctx), `glm-5.1`, `glm-5`, `glm-4.7`, `glm-4.5-Air` (lightweight)
+
+### Moonshot (Kimi)
+- **Base URL (domestic):** `https://api.moonshot.cn/anthropic`
+- **Base URL (international):** `https://api.moonshot.ai/anthropic`
+- **Models:** `kimi-k2-0711-preview` (131K ctx), `kimi-k2-turbo-preview` (262K ctx), `kimi-k2-0905`
+
+### MiniMax
+- **Base URL (domestic):** `https://api.minimaxi.com/anthropic`
+- **Base URL (international):** `https://api.minimax.io/anthropic`
+- **Models:** `MiniMax-M3` (latest), `MiniMax-M2.7` (best reasoning, 205K ctx), `MiniMax-M2.5`, `MiniMax-M2.1`, `MiniMax-M2`
+
+### Qwen / DashScope (通义千问)
+- **Base URL:** `https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy`
+- **Models:** `qwen3-max` (flagship), `qwen3-plus`, `qwen3-turbo`, `qwen3-coder`, `qwen-max`, `qwen-plus`, `qwen-turbo`
+
+### LongCat
+- **Base URL:** `https://api.longcat.chat/anthropic`
+- **Models:** `LongCat-2.0`
 
 ## ccs commands quick reference
 

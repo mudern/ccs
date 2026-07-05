@@ -73,15 +73,21 @@ Copy the `skills/ccs-config/SKILL.md` content into your Codex rules for the same
 
 Each `.env` file defines an Anthropic-compatible API provider: key, base URL, and model-to-slot mappings.
 
-## Supported Providers (built-in examples)
+## Supported Providers
 
-| Provider | Base URL |
-|----------|----------|
-| DeepSeek | `https://api.deepseek.com/anthropic` |
-| GLM (Zhipu) | `https://open.bigmodel.cn/api/anthropic` |
-| LongCat | `https://api.longcat.chat/anthropic` |
-| Moonshot (Kimi) | — |
-| MiniMax | — |
+Known Anthropic-compatible providers and their base URLs:
+
+| Provider | Base URL | Models |
+|----------|----------|--------|
+| DeepSeek | `https://api.deepseek.com/anthropic` | `deepseek-v4-pro`, `deepseek-v4-flash` |
+| Zhipu GLM | `https://open.bigmodel.cn/api/anthropic` | `glm-5.2`, `glm-5.1`, `glm-5`, `glm-4.7`, `glm-4.5-Air` |
+| | `https://api.z.ai/api/anthropic` (international) | |
+| Moonshot Kimi | `https://api.moonshot.cn/anthropic` | `kimi-k2-0711-preview`, `kimi-k2-turbo-preview`, `kimi-k2-0905` |
+| | `https://api.moonshot.ai/anthropic` (international) | |
+| MiniMax | `https://api.minimaxi.com/anthropic` | `MiniMax-M3`, `MiniMax-M2.7`, `MiniMax-M2.5`, `MiniMax-M2.1` |
+| | `https://api.minimax.io/anthropic` (international) | |
+| Qwen DashScope | `https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy` | `qwen3-max`, `qwen3-plus`, `qwen3-turbo`, `qwen3-coder` |
+| LongCat | `https://api.longcat.chat/anthropic` | `LongCat-2.0` |
 
 ## Install from Source
 
