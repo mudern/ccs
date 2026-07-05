@@ -1,0 +1,349 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_DIR="${HOME}/.config/ccs"
+PROVIDERS_DIR="${BASE_DIR}/providers"
+CURRENT_ENV="${BASE_DIR}/current.env"
+CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+
+require_file() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "文件不存在: $file" >&2; exit 1; }
+}
+
+load_current() {
+  require_file "$CURRENT_ENV"
+  set -a
+  . "$CURRENT_ENV"
+  set +a
+}
+
+effective_model() {
+  printf '%s\n' "${ANTHROPIC_MODEL:-${ANTHROPIC_DEFAULT_SONNET_MODEL:-${ANTHROPIC_DEFAULT_OPUS_MODEL:-${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}}}}"
+}
+
+mask_secret() {
+  local value="${1:-}"
+  if [[ -z "$value" ]]; then
+    printf '%s\n' "(empty)"
+    return
+  fi
+
+  local len=${#value}
+  if (( len <= 8 )); then
+    printf '%s\n' "${value:0:2}...(${len})"
+  else
+    printf '%s\n' "${value:0:6}...${value: -4} (${len})"
+  fi
+}
+
+sync_claude_settings() {
+  load_current
+
+  python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+data = {}
+if settings_path.exists():
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+
+keys = [
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+    "CLAUDE_CODE_EFFORT_LEVEL",
+    "API_TIMEOUT_MS",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+]
+
+env_block = {k: os.environ[k] for k in keys if os.environ.get(k)}
+data["env"] = env_block
+
+model = (
+    os.environ.get("ANTHROPIC_MODEL")
+    or os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL")
+    or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
+    or os.environ.get("ANTHROPIC_DEFAULT_HAIKU_MODEL")
+)
+if model:
+    data["model"] = model
+
+settings_path.parent.mkdir(parents=True, exist_ok=True)
+settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+doctor() {
+  load_current
+
+  local current_target current_model
+  local settings_provider settings_model settings_base settings_token
+  local settings_sonnet settings_opus settings_haiku
+
+  current_target="$(readlink -f "$CURRENT_ENV" 2>/dev/null || printf '%s' "$CURRENT_ENV")"
+  current_model="$(effective_model)"
+
+  if [[ -f "$CLAUDE_SETTINGS" ]]; then
+    mapfile -t _doctor_lines < <(
+      python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+data = json.loads(settings_path.read_text(encoding="utf-8"))
+env = data.get("env", {})
+keys = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "model",
+]
+for key in keys:
+    if key == "model":
+        print(f"{key}={data.get(key, '')}")
+    else:
+        print(f"{key}={env.get(key, '')}")
+PY
+    )
+  else
+    _doctor_lines=()
+  fi
+
+  for line in "${_doctor_lines[@]}"; do
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "$key" in
+      ANTHROPIC_BASE_URL) settings_base="$value" ;;
+      ANTHROPIC_MODEL) settings_model="$value" ;;
+      ANTHROPIC_DEFAULT_SONNET_MODEL) settings_sonnet="$value" ;;
+      ANTHROPIC_DEFAULT_OPUS_MODEL) settings_opus="$value" ;;
+      ANTHROPIC_DEFAULT_HAIKU_MODEL) settings_haiku="$value" ;;
+      ANTHROPIC_AUTH_TOKEN) settings_token="$value" ;;
+      model) settings_provider="$value" ;;
+    esac
+  done
+
+  echo "== current.env =="
+  echo "file: ${current_target}"
+  echo "provider: ${CLAUDE_CODE_PROVIDER:-}"
+  echo "base_url: ${ANTHROPIC_BASE_URL:-}"
+  echo "model: ${current_model}"
+  echo "token: $(mask_secret "${ANTHROPIC_AUTH_TOKEN:-}")"
+  echo
+
+  echo "== claude settings =="
+  echo "file: ${CLAUDE_SETTINGS}"
+  if [[ -f "$CLAUDE_SETTINGS" ]]; then
+    echo "base_url: ${settings_base:-}"
+    echo "env_model: ${settings_model:-}"
+    echo "default_sonnet: ${settings_sonnet:-}"
+    echo "default_opus: ${settings_opus:-}"
+    echo "default_haiku: ${settings_haiku:-}"
+    echo "settings.model: ${settings_provider:-}"
+    echo "token: $(mask_secret "${settings_token:-}")"
+  else
+    echo "missing"
+  fi
+  echo
+
+  echo "== consistency =="
+  [[ "${ANTHROPIC_BASE_URL:-}" == "${settings_base:-}" ]] && echo "base_url: OK" || echo "base_url: MISMATCH"
+  [[ "${current_model:-}" == "${settings_model:-}" ]] && echo "env_model: OK" || echo "env_model: MISMATCH"
+  [[ "${ANTHROPIC_AUTH_TOKEN:-}" == "${settings_token:-}" ]] && echo "token: OK" || echo "token: MISMATCH"
+}
+
+test_conn() {
+  load_current
+
+  local url="${ANTHROPIC_BASE_URL%/}/v1/messages"
+  local model
+  local resp code body
+
+  model="$(effective_model)"
+  [[ -n "$model" ]] || { echo "未配置可用模型: ANTHROPIC_MODEL / DEFAULT_SONNET / DEFAULT_OPUS / DEFAULT_HAIKU" >&2; exit 1; }
+
+  echo "Testing ${CLAUDE_CODE_PROVIDER} (${model})..."
+
+  resp="$(
+    curl -sS -m 30 \
+      -H "content-type: application/json" \
+      -H "Authorization: Bearer ${ANTHROPIC_AUTH_TOKEN}" \
+      -H "x-api-key: ${ANTHROPIC_AUTH_TOKEN}" \
+      -H "anthropic-version: 2023-06-01" \
+      -d "{
+        \"model\": \"${model}\",
+        \"max_tokens\": 1,
+        \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}]
+      }" \
+      -w '\nHTTP_STATUS:%{http_code}' \
+      "$url" 2>&1
+  )"
+
+  code="${resp##*HTTP_STATUS:}"
+  body="${resp%HTTP_STATUS:*}"
+
+  if [[ "$code" == "200" ]]; then
+    echo "OK"
+  else
+    echo "FAILED: HTTP $code"
+    echo "$body"
+    exit 1
+  fi
+}
+
+list_models() {
+  # 列出指定 provider 支持的模型
+  local provider="${1:-}"
+  if [[ -n "$provider" ]]; then
+    local src="${PROVIDERS_DIR}/${provider}.env"
+    require_file "$src"
+    set -a
+    . "$src"
+    set +a
+  else
+    load_current
+  fi
+
+  local url="${ANTHROPIC_BASE_URL%/}/v1/models"
+  echo "查询 ${CLAUDE_CODE_PROVIDER} 支持的模型..."
+
+  curl -sS -m 15 \
+    -H "Authorization: Bearer ${ANTHROPIC_AUTH_TOKEN}" \
+    -H "x-api-key: ${ANTHROPIC_AUTH_TOKEN}" \
+    -H "anthropic-version: 2023-06-01" \
+    "$url" | python3 -m json.tool 2>/dev/null || echo "查询失败"
+}
+
+add_provider() {
+  local name="$1"
+  local key="$2"
+  local url="$3"
+  local primary_model="$4"
+  local haiku_model="${5:-$primary_model}"
+
+  [[ -n "$name" && -n "$key" && -n "$url" && -n "$primary_model" ]] || {
+    echo "用法: ccs add <name> <api_key> <base_url> <primary_model> [haiku_model]"
+    echo "示例: ccs add myprovider sk-xxx https://api.example.com/anthropic model-name fast-model"
+    exit 1
+  }
+
+  local dest="${PROVIDERS_DIR}/${name}.env"
+  if [[ -f "$dest" ]]; then
+    echo "Provider '$name' 已存在，覆盖? [y/N]"
+    read -r confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || exit 0
+  fi
+
+  cat > "$dest" <<EOF
+ANTHROPIC_AUTH_TOKEN='$key'
+ANTHROPIC_BASE_URL='$url'
+ANTHROPIC_MODEL='$primary_model'
+ANTHROPIC_DEFAULT_HAIKU_MODEL='$haiku_model'
+ANTHROPIC_DEFAULT_OPUS_MODEL='$primary_model'
+ANTHROPIC_DEFAULT_SONNET_MODEL='$primary_model'
+CLAUDE_CODE_SUBAGENT_MODEL='$haiku_model'
+CLAUDE_CODE_EFFORT_LEVEL='max'
+API_TIMEOUT_MS='3000000'
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC='1'
+CLAUDE_CODE_PROVIDER='$name'
+EOF
+  echo "已创建 provider: $name"
+}
+
+case "${1:-}" in
+  use)
+    provider="${2:-}"
+    test_after="${3:-}"
+
+    [[ -n "$provider" ]] || { echo "用法: ccs use <provider> [--test]"; exit 1; }
+
+    src="${PROVIDERS_DIR}/${provider}.env"
+    require_file "$src"
+
+    ln -sfn "$src" "$CURRENT_ENV"
+    sync_claude_settings
+    echo "已切换到: $provider"
+
+    if [[ "$test_after" == "--test" ]]; then
+      "$0" test
+    fi
+    ;;
+
+  test)
+    test_conn
+    ;;
+
+  current)
+    load_current
+    model="$(effective_model)"
+    echo "provider: ${CLAUDE_CODE_PROVIDER}"
+    echo "base_url: ${ANTHROPIC_BASE_URL}"
+    echo "model: ${model}"
+    ;;
+
+  list|ls)
+    for f in "$PROVIDERS_DIR"/*.env; do
+      basename "$f" .env
+    done
+    ;;
+
+  env)
+    load_current
+    env | grep '^ANTHROPIC_\|^API_TIMEOUT_MS\|^CLAUDE_CODE_'
+    ;;
+
+  doctor)
+    doctor
+    ;;
+
+  run)
+    provider="${2:-}"
+    [[ -n "$provider" ]] || { echo "用法: ccs run <provider>"; exit 1; }
+
+    src="${PROVIDERS_DIR}/${provider}.env"
+    require_file "$src"
+    shift 2
+
+    set -a
+    . "$src"
+    set +a
+
+    model="$(effective_model)"
+    echo "临时使用: $provider (model: $model)"
+    exec /home/mudern/.local/bin/claude --model "$model" "$@"
+    ;;
+
+  models)
+    list_models "${2:-}"
+    ;;
+
+  add)
+    add_provider "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}"
+    ;;
+
+  *)
+    echo "用法:"
+    echo "  ccs list                       # 列出所有 provider"
+    echo "  ccs use <provider> [--test]    # 切换全局 provider"
+    echo "  ccs run <provider>             # 临时使用某 provider 启动 Claude"
+    echo "  ccs add <name> <key> <url> <model> [haiku]  # 添加新 provider"
+    echo "  ccs models [provider]          # 列出 provider 支持的模型"
+    echo "  ccs test                       # 测试当前连接"
+    echo "  ccs current                    # 显示当前 provider"
+    echo "  ccs env                        # 显示当前环境变量"
+    echo "  ccs doctor                     # 诊断配置一致性"
+    exit 1
+    ;;
+esac
