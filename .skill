@@ -50,7 +50,18 @@ CLAUDE_CODE_PROVIDER='<name>'
 
 ### Step 1: Discover available models
 
-Query the provider's Anthropic-compatible models endpoint:
+**Primary approach — search the provider's documentation:**
+
+Use WebSearch or WebFetch to find the provider's official API documentation. Look for:
+- A "Models" or "Available Models" page
+- Model ID strings (e.g. `gpt-4o`, `deepseek-chat`, `LongCat-2.0`)
+- Which models are Anthropic-compatible
+
+Example search: `"<provider name> API models documentation anthropic compatible"`
+
+**Fallback — query `/v1/models` (NOT all providers support this):**
+
+Only try this if you know the provider supports it (e.g. LongCat, OpenAI-compatible proxies). Many providers do NOT expose this endpoint.
 
 ```bash
 curl -s "<BASE_URL>/v1/models" \
@@ -113,7 +124,7 @@ ccs doctor        # Diagnose config consistency between current.env and settings
 When the user provides a new API key and wants to add a provider:
 
 1. **Always ask for the base URL** if not provided. Do NOT guess.
-2. **Query the models endpoint** to discover available model names: `curl -s "<base_url>/v1/models" -H "Authorization: Bearer <key>" -H "x-api-key: <key>" -H "anthropic-version: 2023-06-01"`
+2. **Discover available models** — search the provider's official API docs (WebSearch/WebFetch). Do NOT blindly query `/v1/models` — most providers don't support it.
 3. **Map the models**: the most capable model → OPUS/SONNET slots, the cheapest/fastest → HAIKU/SUBAGENT slots
 4. **Create the .env file** at `~/.config/ccs/providers/<name>.env` with the correct model names
 5. **Test the connection** with `ccs use <name> --test`
