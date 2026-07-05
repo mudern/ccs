@@ -34,8 +34,9 @@ echo "  ✓ ccs → $BIN_DIR/ccs"
 
 # 3. Install skill (for Claude Code / Codex auto-configuration)
 echo "→ Installing ccs-config skill..."
-curl -fsSL "$REPO_URL/.skill" -o "$SKILL_DIR/ccs-config.skill"
-echo "  ✓ skill → $SKILL_DIR/ccs-config.skill"
+mkdir -p "$SKILL_DIR/ccs-config"
+curl -fsSL "$REPO_URL/skills/ccs-config/SKILL.md" -o "$SKILL_DIR/ccs-config/SKILL.md"
+echo "  ✓ skill → $SKILL_DIR/ccs-config/SKILL.md"
 
 # 4. Check PATH
 if ! echo "$PATH" | grep -q "$BIN_DIR"; then

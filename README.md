@@ -48,7 +48,7 @@ CCS ships with a `.skill` file that enables intelligent configuration with Claud
 
 ### How it works
 
-The installer places the skill at `~/.claude/skills/ccs-config.skill`. Then, simply tell Claude Code:
+The installer places the skill at `~/.claude/skills/ccs-config/SKILL.md`. Then, simply tell Claude Code:
 
 ```
 Add a new provider called LongCat, key is ak_xxx, base URL is https://api.longcat.chat/anthropic
@@ -58,7 +58,7 @@ The agent will automatically: query available models → create the `.env` file 
 
 ### For Codex users
 
-Copy the `.skill` file content into your Codex rules for the same behavior.
+Copy the `skills/ccs-config/SKILL.md` content into your Codex rules for the same behavior.
 
 ## Architecture
 
