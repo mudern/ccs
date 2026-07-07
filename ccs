@@ -262,6 +262,23 @@ EOF
   echo "已创建 provider: $name"
 }
 
+list_tokens() {
+  # 列出所有 provider 及其 token 和模型
+  printf "%-10s %-28s %-22s %s\n" "PROVIDER" "TOKEN" "MODEL" "BASE_URL"
+  printf "%-10s %-28s %-22s %s\n" "--------" "-----" "-----" "--------"
+  for f in "$PROVIDERS_DIR"/*.env; do
+    local name token model base_url
+    name="$(basename "$f" .env)"
+    set -a
+    . "$f"
+    set +a
+    token="$(mask_secret "${ANTHROPIC_AUTH_TOKEN:-}")"
+    model="${ANTHROPIC_MODEL:-}"
+    base_url="${ANTHROPIC_BASE_URL:-}"
+    printf "%-10s %-28s %-22s %s\n" "$name" "$token" "$model" "$base_url"
+  done
+}
+
 case "${1:-}" in
   use)
     provider="${2:-}"
@@ -352,12 +369,17 @@ case "${1:-}" in
     add_provider "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}"
     ;;
 
+  tokens)
+    list_tokens
+    ;;
+
   *)
     echo "用法:"
     echo "  ccs list                       # 列出所有 provider"
     echo "  ccs use <provider> [--test]    # 切换全局 provider"
     echo "  ccs run <provider>             # 临时使用某 provider 启动 Claude"
     echo "  ccs add <name> <key> <url> <model> [haiku]  # 添加新 provider"
+    echo "  ccs tokens                      # 列出所有 provider 的 token 和模型"
     echo "  ccs models [provider]          # 列出 provider 支持的模型"
     echo "  ccs test                       # 测试当前连接"
     echo "  ccs current                    # 显示当前 provider"
