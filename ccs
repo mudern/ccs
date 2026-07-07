@@ -266,22 +266,29 @@ list_tokens() {
   # 列出所有 provider 及其 token 和模型
   # 用法: ccs tokens [--raw]
   local show_raw="${1:-}"
-  printf "%-10s %-50s %-22s %s\n" "PROVIDER" "TOKEN" "MODEL" "BASE_URL"
-  printf "%-10s %-50s %-22s %s\n" "--------" "-----" "-----" "--------"
+  printf "%-10s %-50s %-22s %-22s %-22s %-22s %s\n" \
+    "PROVIDER" "TOKEN" "HAIKU" "SONNET" "OPUS" "MODEL" "BASE_URL"
+  printf "%-10s %-50s %-22s %-22s %-22s %-22s %s\n" \
+    "--------" "-----" "-----" "------" "----" "-----" "--------"
   for f in "$PROVIDERS_DIR"/*.env; do
-    local name token model base_url
-    name="$(basename "$f" .env)"
-    set -a
-    . "$f"
-    set +a
-    if [[ "$show_raw" == "--raw" ]]; then
-      token="${ANTHROPIC_AUTH_TOKEN:-}"
-    else
-      token="$(mask_secret "${ANTHROPIC_AUTH_TOKEN:-}")"
-    fi
-    model="${ANTHROPIC_MODEL:-}"
-    base_url="${ANTHROPIC_BASE_URL:-}"
-    printf "%-10s %-50s %-22s %s\n" "$name" "$token" "$model" "$base_url"
+    local name token model base_url haiku sonnet opus
+    # 在子 shell 中 source，避免变量残留污染下一次迭代
+    (
+      . "$f"
+      name="$(basename "$f" .env)"
+      if [[ "$show_raw" == "--raw" ]]; then
+        token="${ANTHROPIC_AUTH_TOKEN:-}"
+      else
+        token="$(mask_secret "${ANTHROPIC_AUTH_TOKEN:-}")"
+      fi
+      haiku="${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"
+      sonnet="${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"
+      opus="${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
+      model="${ANTHROPIC_MODEL:-}"
+      base_url="${ANTHROPIC_BASE_URL:-}"
+      printf "%-10s %-50s %-22s %-22s %-22s %-22s %s\n" \
+        "$name" "$token" "$haiku" "$sonnet" "$opus" "$model" "$base_url"
+    )
   done
 }
 
