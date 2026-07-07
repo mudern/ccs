@@ -266,15 +266,11 @@ list_tokens() {
   # 列出所有 provider 及其 token 和模型
   # 用法: ccs tokens [--raw]
   local show_raw="${1:-}"
-  printf "%-10s %-50s %-22s %-22s %-22s %-22s %s\n" \
-    "PROVIDER" "TOKEN" "HAIKU" "SONNET" "OPUS" "MODEL" "BASE_URL"
-  printf "%-10s %-50s %-22s %-22s %-22s %-22s %s\n" \
-    "--------" "-----" "-----" "------" "----" "-----" "--------"
   for f in "$PROVIDERS_DIR"/*.env; do
-    local name token model base_url haiku sonnet opus
     # 在子 shell 中 source，避免变量残留污染下一次迭代
     (
       . "$f"
+      local name token haiku sonnet opus model base_url
       name="$(basename "$f" .env)"
       if [[ "$show_raw" == "--raw" ]]; then
         token="${ANTHROPIC_AUTH_TOKEN:-}"
@@ -286,8 +282,10 @@ list_tokens() {
       opus="${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
       model="${ANTHROPIC_MODEL:-}"
       base_url="${ANTHROPIC_BASE_URL:-}"
-      printf "%-10s %-50s %-22s %-22s %-22s %-22s %s\n" \
-        "$name" "$token" "$haiku" "$sonnet" "$opus" "$model" "$base_url"
+      printf "  \033[1;36m%-10s\033[0m %s\n" "$name" "$base_url"
+      printf "  \033[1;33mtoken\033[0m       %s\n" "$token"
+      printf "  \033[1;33mmodels\033[0m      ⚡haiku=%s  💨sonnet=%s  🧠opus=%s\n" "$haiku" "$sonnet" "$opus"
+      [[ -n "$model" ]] && printf "  \033[1;33mdefault\033[0m     %s\n" "$model"
     )
   done
 }
